@@ -1,8 +1,8 @@
 import os
 import torch
 
-def get_dataloader(dataset: torch.utils.data.Dataset) -> torch.utils.data.DataLoader:
-    return torch.utils.data.DataLoader(dataset, num_workers=0, batch_size=64)
+def get_dataloader(dataset: torch.utils.data.Dataset, train: bool) -> torch.utils.data.DataLoader:
+    return torch.utils.data.DataLoader(dataset, num_workers=0, batch_size=64, shuffle=train)
 
 def download_dataset_if_necessary(path, download, dataset, path_ext):
     if download is None:

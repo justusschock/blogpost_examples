@@ -202,10 +202,10 @@ if __name__ == "__main__":
 
     # 15.) Create DataLoaders
     # those will create a single batch consisting of two subbatches: one from the clf loader and one from the reg loader
-    trainloaders = [get_dataloader(trainset_clf), get_dataloader(trainset_reg)]
+    trainloaders = [get_dataloader(trainset_clf, True), get_dataloader(trainset_reg, True)]
 
     # they will be used sequentially
-    valloaders = [get_dataloader(validationset_clf), get_dataloader(validationset_reg)]
+    valloaders = [get_dataloader(validationset_clf, False), get_dataloader(validationset_reg, False)]
 
     # 16.) Create Trainer and Model
     trainer = pl.Trainer(gpus=gpus)

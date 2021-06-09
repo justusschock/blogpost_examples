@@ -8,23 +8,12 @@ from torchvision.io import read_image
 from torchvision.models import resnet18
 from torchvision.transforms import Normalize
 
+from .utils import download_dataset_if_necessary, get_dataloader, split_data
 
+# 1.) Define Dataset
 class FacialAgeClassificationDataset(torch.utils.data.Dataset):
     def __init__(self, path: str, download: Optional[bool] = None):
-        if download is None:
-            download = not os.path.exists(os.path.join(path, "face_age"))
-
-        if download:
-            from kaggle.api.kaggle_api_extended import KaggleApi
-
-            api = KaggleApi()
-            api.authenticate()
-
-            os.makedirs(path, exist_ok=True)
-            api.dataset_download_files(
-                "frabbisw/facial-age", path=path, quiet=False, unzip=True
-            )
-        path = os.path.join(path, "face_age")
+        path = download_dataset_if_necessary(path, download, "frabbisw/facial-age", "face_age")
 
         self.path = path
         self.class_mapping = {}
@@ -45,7 +34,10 @@ class FacialAgeClassificationDataset(torch.utils.data.Dataset):
             except (TypeError, ValueError):
                 continue
 
+            # map to continuous class indices
             self.class_mapping[int(directory)] = idx
+
+            # parse all files
             for file in sorted(
                 [
                     x
@@ -57,20 +49,25 @@ class FacialAgeClassificationDataset(torch.utils.data.Dataset):
                 self.files.append((directory, file))
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        # get directory and file
         directory, file = self.files[index]
+
+        # get label (from directory name)
         label = torch.tensor(self.class_mapping[int(directory)]).long()
 
+        # read image
         image = read_image(os.path.join(self.path, directory, file))
 
         # convert from [0, 255] to [0, 1] since Normalize expects that range
         image = image / 255.0
 
+        # apply normalization to image
         return self.normalization(image), label
 
     def __len__(self) -> int:
         return len(self.files)
 
-
+# 2.) Define Model
 class LitModule(pl.LightningModule):
     def __init__(self, num_classes: int, pretrained: bool = True):
         super().__init__()
@@ -90,6 +87,7 @@ class LitModule(pl.LightningModule):
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> torch.Tensor:
+        # 3.) In training: Only one batch, always of same type
         x, y = batch
 
         y_hat = self.model(x)
@@ -105,6 +103,7 @@ class LitModule(pl.LightningModule):
     def validation_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> None:
+        # 4.) In validation: Only one batch, always of same type
         x, y = batch
 
         y_hat = self.model(x)
@@ -119,40 +118,38 @@ class LitModule(pl.LightningModule):
         return torch.optim.Adam(self.model.parameters())
 
 
-def get_dataloader(dataset: torch.utils.data.Dataset) -> torch.utils.data.DataLoader:
-    return torch.utils.data.DataLoader(dataset, num_workers=0, batch_size=128)
-
-
 if __name__ == "__main__":
-    # seed for reproducability
+     # 5.) seed for reproducability
     torch.manual_seed(42)
+
+    # 6.) Select Devices for training
     if torch.cuda.is_available():
         gpus = 1
     else:
         gpus = None
 
+    # 7.) Instantiate Dataset
     dataset = FacialAgeClassificationDataset("/tmp/data")
+
+    # ONLY HERE SINCE WE USE TWO PARTS OF THE SAME DATASET FOR DEMONSTRATION:
+    # split into dataset parts
+    dataset1, dataset2 = split_data(dataset, 0.5)
+
+    # 7.1 Optionally: Split into trainset and validationset
+    trainset1, valset1 = split_data(dataset1, 0.75)
+    trainset2, valset2 = split_data(dataset2, 0.75)
+
+    # 8.) Concatenate Datasets (they produce batches of the same type)
+    trainset = torch.utils.data.ConcatDataset([trainset1, trainset2])
+    valset = torch.utils.data.ConcatDataset([valset1, valset2])
+
+    # 9.) Create dataloaders
+    trainloader = get_dataloader(trainset, True)
+    valloader = get_dataloader(valset, False)
+
+    # 10.) Create Model and Trainer
     trainer = pl.Trainer(gpus=gpus)
     model = LitModule(num_classes=len(dataset.class_mapping))
 
-    # use 75% of the data for training, rest for validation
-    trainset_length = int(len(dataset) * 0.75)
-    valset_length = len(dataset) - trainset_length
-
-    trainset, validationset = torch.utils.data.random_split(
-        dataset, [trainset_length, valset_length]
-    )
-
-    trainer.fit(model, get_dataloader(trainset), get_dataloader(validationset))
-
-    # split trainset into 2 parts
-    trainset_part1, trainset_part2 = torch.utils.data.random_split(
-        trainset, [trainset_length // 2, trainset_length - trainset_length // 2]
-    )
-
-    # recreate model
-    model = LitModule(num_classes=len(dataset.class_mapping))
-
-    # merge back datasets
-    trainset = torch.utils.data.ConcatDataset([trainset_part1, trainset_part2])
-    trainer.fit(model, get_dataloader(trainset), get_dataloader(validationset))
+    # 11.) Train!
+    trainer.fit(model, trainloader, valloader)

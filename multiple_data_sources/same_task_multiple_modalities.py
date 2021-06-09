@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
     # 9.) Instantiate (combined) Dataset
     dataset_path = "/tmp/data/kaggle"
-    download_competition_data_if_necessary(dataset_path, "siim-isic-melanoma-classification")
+    dataset_path = download_competition_data_if_necessary(dataset_path, "siim-isic-melanoma-classification")
     dataset = CombinedMelanomaDataset(
         csv_file=os.path.join(dataset_path, "train.csv"),
         root_dir=os.path.join(dataset_path, "jpeg", "train"),
@@ -164,8 +164,8 @@ if __name__ == "__main__":
     trainset, valset = split_data(dataset, 0.75)
 
     # 10.) Create DataLoaders
-    trainloader = get_dataloader(trainset)
-    valloader = get_dataloader(valset)
+    trainloader = get_dataloader(trainset, True)
+    valloader = get_dataloader(valset, False)
 
     # 11.) Create Trainer and Model
     model = MyLitModel()
