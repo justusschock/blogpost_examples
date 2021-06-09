@@ -9,12 +9,15 @@ from torchvision.io import read_image
 from torchvision.models import resnet18
 from torchvision.transforms import Normalize
 
-from .utils import get_dataloader, download_dataset_if_necessary, split_data
+from .utils import download_dataset_if_necessary, get_dataloader, split_data
+
 
 # 1.) Define First Task Dataset
 class FacialAgeClassificationDataset(torch.utils.data.Dataset):
     def __init__(self, path: str, download: Optional[bool] = None):
-        path = download_dataset_if_necessary(path, download, "frabbisw/facial-age", "face_age")
+        path = download_dataset_if_necessary(
+            path, download, "frabbisw/facial-age", "face_age"
+        )
 
         self.path = path
         self.class_mapping = {}
@@ -85,6 +88,7 @@ class FacialAgeRegressionDataset(FacialAgeClassificationDataset):
 
         return image, label
 
+
 # 3.) Define Model
 class LitModule(pl.LightningModule):
     def __init__(self, num_classes: int, pretrained: bool = True):
@@ -118,7 +122,6 @@ class LitModule(pl.LightningModule):
 
         # 5.) In training: Split into sub batches
         batch_clf, batch_reg = batch
-
 
         # 6.) Do Forward and metric calculation of one task
         x, y = batch_clf
@@ -202,10 +205,16 @@ if __name__ == "__main__":
 
     # 15.) Create DataLoaders
     # those will create a single batch consisting of two subbatches: one from the clf loader and one from the reg loader
-    trainloaders = [get_dataloader(trainset_clf, True), get_dataloader(trainset_reg, True)]
+    trainloaders = [
+        get_dataloader(trainset_clf, True),
+        get_dataloader(trainset_reg, True),
+    ]
 
     # they will be used sequentially
-    valloaders = [get_dataloader(validationset_clf, False), get_dataloader(validationset_reg, False)]
+    valloaders = [
+        get_dataloader(validationset_clf, False),
+        get_dataloader(validationset_reg, False),
+    ]
 
     # 16.) Create Trainer and Model
     trainer = pl.Trainer(gpus=gpus)
