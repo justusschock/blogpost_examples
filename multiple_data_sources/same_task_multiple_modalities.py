@@ -9,6 +9,7 @@ from torchvision.io import read_image
 from torchvision.models import resnet50
 from torchvision.transforms import Normalize, Resize
 
+
 # 1.) Define Dataset for first modality
 class MelanomaImageDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file: str, root_dir: str) -> None:
@@ -38,6 +39,7 @@ class MelanomaImageDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.annotations)
 
+
 # 2.) Define Dataset for second modality
 class MelanomaCSVDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file: str) -> None:
@@ -54,6 +56,7 @@ class MelanomaCSVDataset(torch.utils.data.Dataset):
 
     def __len__(self) -> int:
         return len(self.annotations)
+
 
 # 3.) Combine Datasets in separate Dataset class
 class CombinedMelanomaDataset(torch.utils.data.Dataset):
@@ -72,6 +75,7 @@ class CombinedMelanomaDataset(torch.utils.data.Dataset):
 
     def __len__(self) -> int:
         return min(len(self.image_dataset), len(self.csv_dataset))
+
 
 # 4.) Define Model
 class MyLitModel(pl.LightningModule):
@@ -142,7 +146,8 @@ class MyLitModel(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    from .utils import download_competition_data_if_necessary, split_data, get_dataloader
+    from .utils import (download_competition_data_if_necessary, get_dataloader,
+                        split_data)
 
     # 7.) Seed for reproducability
     torch.manual_seed(42)
@@ -154,7 +159,9 @@ if __name__ == "__main__":
 
     # 9.) Instantiate (combined) Dataset
     dataset_path = "/tmp/data/kaggle"
-    dataset_path = download_competition_data_if_necessary(dataset_path, "siim-isic-melanoma-classification")
+    dataset_path = download_competition_data_if_necessary(
+        dataset_path, "siim-isic-melanoma-classification"
+    )
     dataset = CombinedMelanomaDataset(
         csv_file=os.path.join(dataset_path, "train.csv"),
         root_dir=os.path.join(dataset_path, "jpeg", "train"),

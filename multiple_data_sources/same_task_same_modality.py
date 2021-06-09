@@ -10,10 +10,13 @@ from torchvision.transforms import Normalize
 
 from .utils import download_dataset_if_necessary, get_dataloader, split_data
 
+
 # 1.) Define Dataset
 class FacialAgeClassificationDataset(torch.utils.data.Dataset):
     def __init__(self, path: str, download: Optional[bool] = None):
-        path = download_dataset_if_necessary(path, download, "frabbisw/facial-age", "face_age")
+        path = download_dataset_if_necessary(
+            path, download, "frabbisw/facial-age", "face_age"
+        )
 
         self.path = path
         self.class_mapping = {}
@@ -67,6 +70,7 @@ class FacialAgeClassificationDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.files)
 
+
 # 2.) Define Model
 class LitModule(pl.LightningModule):
     def __init__(self, num_classes: int, pretrained: bool = True):
@@ -119,7 +123,7 @@ class LitModule(pl.LightningModule):
 
 
 if __name__ == "__main__":
-     # 5.) seed for reproducability
+    # 5.) seed for reproducability
     torch.manual_seed(42)
 
     # 6.) Select Devices for training
