@@ -9,7 +9,7 @@ from torchvision.io import read_image
 from torchvision.models import resnet50
 from torchvision.transforms import Normalize, Resize
 
-
+# 1.) Define Dataset for first modality
 class MelanomaImageDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file: str, root_dir: str) -> None:
         self.annotations = pd.read_csv(csv_file).dropna()
@@ -21,6 +21,7 @@ class MelanomaImageDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index: int) -> torch.Tensor:
 
+        # read image
         image = read_image(
             os.path.join(self.root_dir, self.annotations.iloc[index, 0] + ".jpg")
         )
@@ -28,20 +29,23 @@ class MelanomaImageDataset(torch.utils.data.Dataset):
         # convert from [0, 255] to [0, 1] since Normalize expects that range
         image = image / 255.0
 
+        # resize image to target size
         image = self.resize(image)
 
+        # normalize image
         return self.normalize(image)
 
     def __len__(self) -> int:
         return len(self.annotations)
 
-
+# 2.) Define Dataset for second modality
 class MelanomaCSVDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file: str) -> None:
         self.annotations = pd.read_csv(csv_file).dropna()
         self.sex_class_embedding = {"male": 0.0, "female": 1.0}
 
     def __getitem__(self, index: int) -> Tuple[float, float, int]:
+        # convert to categorical classes
         sex = self.sex_class_embedding[self.annotations.iloc[index, 2]]
         age = float(self.annotations.iloc[index, 3])
         target = int(self.annotations.iloc[index, 7])
@@ -51,28 +55,33 @@ class MelanomaCSVDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.annotations)
 
-
+# 3.) Combine Datasets in separate Dataset class
 class CombinedMelanomaDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file: str, root_dir: str) -> None:
+        # instantiate sub datasets
         self.image_dataset = MelanomaImageDataset(csv_file, root_dir)
         self.csv_dataset = MelanomaCSVDataset(csv_file)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, float, float, int]:
+        # sample each of them
         image_sample = self.image_dataset[index]
         csv_sample = self.csv_dataset[index]
 
+        # return combined sample
         return (image_sample, *csv_sample)
 
     def __len__(self) -> int:
         return min(len(self.image_dataset), len(self.csv_dataset))
 
-
+# 4.) Define Model
 class MyLitModel(pl.LightningModule):
     def __init__(self) -> None:
         super().__init__()
 
         self.image_model = resnet50(pretrained=True)
         self.image_model.fc = torch.nn.Linear(self.image_model.fc.in_features, 2)
+
+        # outputs of image model will go into mlp head
         self.mlp_head = torch.nn.Sequential(
             torch.nn.Linear(4, 8),
             torch.nn.ReLU(),
@@ -91,6 +100,7 @@ class MyLitModel(pl.LightningModule):
         batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         batch_idx: int,
     ) -> torch.Tensor:
+        # 5.) In training: One batch containing all parts. Use them as desired
         x_img, x_sex, x_age, y = batch
         x_sex, x_age = x_sex.float(), x_age.float()
 
@@ -112,6 +122,7 @@ class MyLitModel(pl.LightningModule):
         batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         batch_idx: int,
     ) -> torch.Tensor:
+        # 6.) In validation: One batch containing all parts. Use them as desired
         x_img, x_sex, x_age, y = batch
         x_sex, x_age = x_sex.float(), x_age.float()
 
@@ -131,59 +142,34 @@ class MyLitModel(pl.LightningModule):
 
 
 if __name__ == "__main__":
+    from .utils import download_competition_data_if_necessary, split_data, get_dataloader
+
+    # 7.) Seed for reproducability
     torch.manual_seed(42)
 
+    # 8.) Select Devices for Training
+    gpus = None
+    if torch.cuda.is_available():
+        gpus = 1
+
+    # 9.) Instantiate (combined) Dataset
     dataset_path = "/tmp/data/kaggle"
-
-    if not os.path.exists(dataset_path) or not os.path.exists(
-        os.path.join(dataset_path, "siim-isic-melanoma-classification")
-    ):
-        import zipfile
-
-        from kaggle.api.kaggle_api_extended import KaggleApi
-        from tqdm import tqdm
-
-        api = KaggleApi()
-        api.authenticate()
-
-        os.makedirs(dataset_path, exist_ok=True)
-
-        zip_path = os.path.join(dataset_path, "siim-isic-melanoma-classification.zip")
-        if not os.path.isfile(zip_path):
-            api.competition_download_files(
-                "siim-isic-melanoma-classification", path=dataset_path, quiet=False
-            )
-
-        print("Extract Zipfile")
-        with zipfile.ZipFile(zip_path) as f:
-            unzip_path = zip_path.rsplit(".", 1)[0]
-            for file in tqdm(f.infolist()):
-                f.extract(file, unzip_path)
-        os.remove(zip_path)
-
-    dataset_path = os.path.join(dataset_path, "siim-isic-melanoma-classification")
-
+    download_competition_data_if_necessary(dataset_path, "siim-isic-melanoma-classification")
     dataset = CombinedMelanomaDataset(
         csv_file=os.path.join(dataset_path, "train.csv"),
         root_dir=os.path.join(dataset_path, "jpeg", "train"),
     )
 
+    # 9.1) Optionally: Split data into training and validationset
+    trainset, valset = split_data(dataset, 0.75)
+
+    # 10.) Create DataLoaders
+    trainloader = get_dataloader(trainset)
+    valloader = get_dataloader(valset)
+
+    # 11.) Create Trainer and Model
     model = MyLitModel()
-
-    gpus = None
-    if torch.cuda.is_available():
-        gpus = 1
-
-    trainset, valset = torch.utils.data.random_split(
-        dataset, [int(len(dataset) * 0.75), len(dataset) - int(len(dataset) * 0.75)]
-    )
-
-    trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=64, num_workers=8, pin_memory=True, shuffle=True
-    )
-    valloader = torch.utils.data.DataLoader(
-        valset, batch_size=64, num_workers=8, pin_memory=True, shuffle=False
-    )
-
     trainer = pl.Trainer(gpus=gpus)
+
+    # 12. Train
     trainer.fit(model, trainloader, valloader)

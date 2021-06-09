@@ -9,12 +9,12 @@ from torchvision.io import read_image
 from torchvision.models import resnet18
 from torchvision.transforms import Normalize
 
-from .utils import get_dataloader, download_if_necessary, split_data
+from .utils import get_dataloader, download_dataset_if_necessary, split_data
 
 # 1.) Define First Task Dataset
 class FacialAgeClassificationDataset(torch.utils.data.Dataset):
     def __init__(self, path: str, download: Optional[bool] = None):
-        path = download_if_necessary(path, download, "frabbisw/facial-age", "face_age")
+        path = download_dataset_if_necessary(path, download, "frabbisw/facial-age", "face_age")
 
         self.path = path
         self.class_mapping = {}
