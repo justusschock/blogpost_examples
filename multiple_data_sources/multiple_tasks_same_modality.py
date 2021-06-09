@@ -89,7 +89,8 @@ class FacialAgeRegressionDataset(FacialAgeClassificationDataset):
 
 
 class NoOp(torch.nn.Module):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    @staticmethod
+    def forward(x: torch.Tensor) -> torch.Tensor:
         return x
 
 
